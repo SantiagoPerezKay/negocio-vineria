@@ -1,0 +1,27 @@
+# docker-compose.yml — Para desarrollo local apuntando a PostgreSQL de EasyPanel
+# En producción cada servicio se despliega por separado en EasyPanel
+
+services:
+  backend:
+    build: ./backend
+    restart: always
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:vineria123@panel.automatizacionesspk.com:5440/vineria
+    ports:
+      - "8000:8000"
+    # En producción (EasyPanel) sobreescribir DATABASE_URL con la URL interna:
+    # DATABASE_URL: postgresql+asyncpg://postgres:vineria123@trabajo_vineria-postgres:5432/vineria
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: /api   # el nginx del frontend proxea al backend
+    restart: always
+    environment:
+      # Hostname interno del backend en docker-compose local
+      BACKEND_URL: http://backend:8000
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
