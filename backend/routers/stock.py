@@ -24,6 +24,7 @@ class ProductoIn(BaseModel):
     codigo: Optional[str] = None
     categoria_id: Optional[int] = None
     tipo_vino: Optional[str] = None
+    imagen_url: Optional[str] = None
     precio_venta: Decimal
     precio_costo: Optional[Decimal] = None
     stock_actual: Decimal = Decimal("0")

@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { stockAPI } from "../api";
-import { Plus, AlertTriangle, Edit2, TrendingUp, Trash2 } from "lucide-react";
+import { Plus, AlertTriangle, Edit2, TrendingUp, Trash2, Upload, Image } from "lucide-react";
 import Modal from "../components/Modal";
 
 const fmt = (n) =>
@@ -8,6 +8,22 @@ const fmt = (n) =>
 
 const TIPOS_VINO = ["tinto", "blanco", "rosado", "espumante", "dulce", "otro"];
 const UNIDADES = ["unidad", "botella", "caja", "litro", "kg"];
+
+const CLOUDINARY_CLOUD = "dh7ki51v5";
+const CLOUDINARY_PRESET = "vineria_productos";
+
+const uploadToCloudinary = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", CLOUDINARY_PRESET);
+  formData.append("folder", "vineria");
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  const data = await res.json();
+  return data.secure_url;
+};
 
 export default function Stock() {
   const [productos, setProductos] = useState([]);
@@ -20,6 +36,8 @@ export default function Stock() {
   const [ajuste, setAjuste] = useState({ cantidad: "", motivo: "" });
   const [saving, setSaving] = useState(false);
   const [catNombre, setCatNombre] = useState("");
+  const [uploadingImg, setUploadingImg] = useState(false);
+  const fileInputRef = useRef(null);
 
   const cerrarModal = useCallback(() => setModal(null), []);
 
@@ -45,13 +63,13 @@ export default function Stock() {
   };
 
   const abrirNuevo = () => {
-    setForm({ nombre: "", codigo: "", categoria_id: "", tipo_vino: "", precio_venta: "", precio_costo: "", stock_actual: "0", stock_minimo: "0", unidad: "unidad", fecha_vencimiento: "" });
+    setForm({ nombre: "", codigo: "", categoria_id: "", tipo_vino: "", imagen_url: "", precio_venta: "", precio_costo: "", stock_actual: "0", stock_minimo: "0", unidad: "botella", fecha_vencimiento: "" });
     setModal("nuevo");
   };
 
   const abrirEditar = (p) => {
     setSelected(p);
-    setForm({ nombre: p.nombre, codigo: p.codigo || "", categoria_id: p.categoria_id || "", tipo_vino: p.tipo_vino || "", precio_venta: p.precio_venta, precio_costo: p.precio_costo || "", stock_actual: p.stock_actual, stock_minimo: p.stock_minimo, unidad: p.unidad, fecha_vencimiento: p.fecha_vencimiento || "" });
+    setForm({ nombre: p.nombre, codigo: p.codigo || "", categoria_id: p.categoria_id || "", tipo_vino: p.tipo_vino || "", imagen_url: p.imagen_url || "", precio_venta: p.precio_venta, precio_costo: p.precio_costo || "", stock_actual: p.stock_actual, stock_minimo: p.stock_minimo, unidad: p.unidad, fecha_vencimiento: p.fecha_vencimiento || "" });
     setModal("editar");
   };
 
@@ -69,6 +87,7 @@ export default function Stock() {
         codigo: form.codigo?.trim() || null,
         categoria_id: form.categoria_id ? parseInt(form.categoria_id) : null,
         tipo_vino: form.tipo_vino || null,
+        imagen_url: form.imagen_url || null,
         precio_venta: parseFloat(form.precio_venta) || 0,
         precio_costo: parseFloat(form.precio_costo) || 0,
         stock_actual: parseFloat(form.stock_actual) || 0,
@@ -164,7 +183,18 @@ export default function Stock() {
               const bajStock = parseFloat(p.stock_actual) <= parseFloat(p.stock_minimo);
               return (
                 <tr key={p.id}>
-                  <td style={{ fontWeight: 500 }}>{p.nombre}</td>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      {p.imagen_url ? (
+                        <img src={p.imagen_url} alt="" style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />
+                      ) : (
+                        <div style={{ width: 36, height: 36, borderRadius: 6, background: "var(--bg3)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--text3)" }}>
+                          <Image size={16} />
+                        </div>
+                      )}
+                      <span style={{ fontWeight: 500 }}>{p.nombre}</span>
+                    </div>
+                  </td>
                   <td>
                     {p.codigo
                       ? <span className="font-mono" style={{ fontSize: "0.8rem", background: "var(--bg3)", padding: "2px 6px", borderRadius: 4, border: "1px solid var(--border)" }}>{p.codigo}</span>
@@ -206,7 +236,12 @@ export default function Stock() {
           return (
             <div key={p.id} className="card card-sm mb-3">
               <div className="flex justify-between items-center mb-2">
-                <span style={{ fontWeight: 600 }}>{p.nombre}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {p.imagen_url ? (
+                    <img src={p.imagen_url} alt="" style={{ width: 32, height: 32, objectFit: "cover", borderRadius: 6 }} />
+                  ) : null}
+                  <span style={{ fontWeight: 600 }}>{p.nombre}</span>
+                </div>
                 {bajStock ? <span className="badge badge-danger">Bajo stock</span> : <span className="badge badge-success">OK</span>}
               </div>
               <div className="grid-2" style={{ fontSize: "0.8rem", marginBottom: 8, gap: 4 }}>
@@ -287,6 +322,38 @@ export default function Stock() {
             <div className="form-group">
               <label className="form-label">Fecha de vencimiento</label>
               <input type="date" className="form-input" value={form.fecha_vencimiento || ""} onChange={(e) => setForm((p) => ({ ...p, fecha_vencimiento: e.target.value || null }))} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Imagen del producto</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {form.imagen_url ? (
+                <img src={form.imagen_url} alt="Producto" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }} />
+              ) : (
+                <div style={{ width: 64, height: 64, borderRadius: "var(--radius-sm)", border: "1px dashed var(--border)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text3)" }}>
+                  <Image size={24} />
+                </div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setUploadingImg(true);
+                  try {
+                    const url = await uploadToCloudinary(file);
+                    setForm((p) => ({ ...p, imagen_url: url }));
+                  } catch { alert("Error al subir imagen"); }
+                  finally { setUploadingImg(false); }
+                }} />
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => fileInputRef.current?.click()} disabled={uploadingImg}>
+                  <Upload size={14} /> {uploadingImg ? "Subiendo..." : "Subir foto"}
+                </button>
+                {form.imagen_url && (
+                  <button type="button" className="btn btn-ghost btn-sm" style={{ color: "var(--danger)", fontSize: "0.75rem" }} onClick={() => setForm((p) => ({ ...p, imagen_url: "" }))}>
+                    Quitar foto
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

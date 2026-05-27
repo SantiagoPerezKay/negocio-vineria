@@ -24,3 +24,12 @@ async def get_db():
 async def create_tables():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Idempotent migrations for new columns
+        migrations = [
+            "ALTER TABLE productos ADD COLUMN IF NOT EXISTS imagen_url VARCHAR(500)",
+        ]
+        for sql in migrations:
+            try:
+                await conn.execute(text(sql))
+            except Exception:
+                pass
