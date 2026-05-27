@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, NavLink, Navigate } from "react-router-do
 import {
   Package, Users, Truck, BarChart2, DollarSign, AlertTriangle,
   Sun, Moon, Menu, X, List, ShoppingCart, History, Home,
-  Bell, LogOut, Settings, RotateCcw, FileText,
+  Bell, LogOut, Settings, RotateCcw, FileText, Wine,
 } from "lucide-react";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
@@ -38,18 +38,43 @@ function ThemeProvider({ children }) {
   );
 }
 
-// ── Nav items ────────────────────────────────────────────
-const navItems = [
-  { to: "/dashboard",    icon: <Home />,        label: "Inicio",          end: true },
-  { to: "/",             icon: <DollarSign />,  label: "Caja del día",    end: true },
-  { to: "/historial",    icon: <History />,     label: "Historial ventas" },
-  { to: "/presupuestos", icon: <ShoppingCart />,label: "Presupuestos"     },
-  { to: "/facturas",     icon: <FileText />,    label: "Facturación"      },
-  { to: "/stock",        icon: <Package />,     label: "Stock"            },
-  { to: "/clientes",     icon: <Users />,       label: "Clientes / Fiado" },
-  { to: "/proveedores",  icon: <Truck />,       label: "Proveedores"      },
-  { to: "/movimientos",  icon: <List />,        label: "Movimientos"      },
-  { to: "/estadisticas", icon: <BarChart2 />,   label: "Estadísticas"     },
+// ── Nav items (grouped by workflow) ──────────────────────
+const navGroups = [
+  {
+    label: null, // no header for primary
+    items: [
+      { to: "/dashboard", icon: <Home />, label: "Inicio", end: true },
+    ],
+  },
+  {
+    label: "Ventas",
+    items: [
+      { to: "/",             icon: <DollarSign />,  label: "Caja del día",    end: true },
+      { to: "/historial",    icon: <History />,      label: "Historial"        },
+      { to: "/facturas",     icon: <FileText />,     label: "Facturación"      },
+      { to: "/presupuestos", icon: <ShoppingCart />,  label: "Presupuestos"     },
+    ],
+  },
+  {
+    label: "Inventario",
+    items: [
+      { to: "/stock",        icon: <Wine />,         label: "Productos"        },
+    ],
+  },
+  {
+    label: "Personas",
+    items: [
+      { to: "/clientes",     icon: <Users />,        label: "Clientes"         },
+      { to: "/proveedores",  icon: <Truck />,         label: "Proveedores"      },
+    ],
+  },
+  {
+    label: "Reportes",
+    items: [
+      { to: "/movimientos",  icon: <List />,          label: "Movimientos"      },
+      { to: "/estadisticas", icon: <BarChart2 />,     label: "Estadísticas"     },
+    ],
+  },
 ];
 
 // ── Sidebar ──────────────────────────────────────────────
@@ -70,17 +95,24 @@ function Sidebar({ open, onClose, alertCount }) {
         </div>
 
         <nav className="sidebar-nav">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
-              onClick={onClose}
-            >
-              {item.icon}
-              {item.label}
-            </NavLink>
+          {navGroups.map((group, gi) => (
+            <div key={gi}>
+              {group.label && (
+                <div className="nav-group-label">{group.label}</div>
+              )}
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
+                  onClick={onClose}
+                >
+                  {item.icon}
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
 
