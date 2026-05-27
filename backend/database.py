@@ -23,17 +23,6 @@ async def get_db():
 
 async def create_tables():
     async with engine.begin() as conn:
+        # Drop and recreate all tables for clean start (safe for new DB)
+        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-        # Add new columns to existing tables (idempotent)
-        migrations = [
-            "ALTER TABLE ventas ADD COLUMN IF NOT EXISTS descuento_monto NUMERIC(12,2) NOT NULL DEFAULT 0",
-            "ALTER TABLE venta_detalles ADD COLUMN IF NOT EXISTS descuento_porcentaje NUMERIC(5,2) NOT NULL DEFAULT 0",
-            "ALTER TABLE productos ADD COLUMN IF NOT EXISTS fecha_vencimiento DATE",
-            "ALTER TABLE gastos_caja ADD COLUMN IF NOT EXISTS categoria VARCHAR(100)",
-            "ALTER TABLE productos ADD COLUMN IF NOT EXISTS tipo_vino VARCHAR(50)",
-        ]
-        for sql in migrations:
-            try:
-                await conn.execute(text(sql))
-            except Exception:
-                pass  # column already exists or other harmless error
