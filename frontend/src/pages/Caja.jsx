@@ -1,20 +1,23 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { cajaAPI, ventasAPI, stockAPI, clientesAPI, promosAPI } from "../api";
-import { Plus, Trash2, XCircle, CheckCircle, Loader, DollarSign, PlusCircle, Printer, FileText } from "lucide-react";
+import {
+  Plus, Trash2, XCircle, CheckCircle, Loader, DollarSign, PlusCircle,
+  Printer, FileText, Search, ShoppingBag, Clock, Banknote, CreditCard,
+  ArrowRightLeft, AlertCircle, Wine, Tag, Minus, X,
+} from "lucide-react";
 import Modal from "../components/Modal";
 import { imprimirTicket } from "../components/TicketVenta";
 import { facturasAPI } from "../api";
 import { imprimirFactura } from "../components/TicketFactura";
 
-// Helper para normalizar texto (quita tildes, minúsculas)
-const norm = (s) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const norm = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
-const METODOS = ["efectivo", "transferencia", "tarjeta"];
 const CATS_GASTO = ["insumos", "servicios", "sueldos", "mantenimiento", "varios"];
 
 const fmt = (n) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(n || 0);
 
+/* ── Pantalla caja cerrada ────────────────────────────────── */
 function CajaNoAbierta({ onAbrir }) {
   const [monto, setMonto] = useState("");
   const [loading, setLoading] = useState(false);
@@ -30,27 +33,26 @@ function CajaNoAbierta({ onAbrir }) {
   };
 
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
-      <div className="card" style={{ maxWidth: 400, width: "100%", textAlign: "center" }}>
-        <div style={{ fontSize: "3rem", marginBottom: 16 }}>🍷</div>
-        <h2 style={{ fontSize: "1.4rem", fontWeight: 700, marginBottom: 8 }}>Abrir caja del día</h2>
-        <p className="text-muted" style={{ marginBottom: 24, fontSize: "0.9rem" }}>
-          Ingresá el monto inicial en efectivo para comenzar el día
-        </p>
-        <div className="form-group" style={{ marginBottom: 20 }}>
-          <label className="form-label">Caja inicial (efectivo)</label>
+    <div className="caja-empty-state">
+      <div className="caja-empty-card">
+        <div className="caja-empty-icon">
+          <Wine size={40} />
+        </div>
+        <h2>Abrir caja del día</h2>
+        <p>Ingresá el monto inicial en efectivo para comenzar</p>
+        <div className="form-group" style={{ width: "100%", maxWidth: 280 }}>
+          <label className="form-label" style={{ textAlign: "center" }}>Efectivo inicial</label>
           <input
             type="number"
-            className="form-input"
+            className="form-input caja-empty-input"
             placeholder="$ 0"
             value={monto}
             onChange={(e) => setMonto(e.target.value)}
-            style={{ fontSize: "1.2rem", textAlign: "center" }}
             onKeyDown={(e) => e.key === "Enter" && handleAbrir()}
           />
         </div>
-        <button className="btn btn-primary w-full" onClick={handleAbrir} disabled={loading}>
-          {loading ? <Loader size={16} className="spin" /> : <CheckCircle size={16} />}
+        <button className="btn btn-primary btn-lg" onClick={handleAbrir} disabled={loading}>
+          {loading ? <Loader size={18} className="spin" /> : <CheckCircle size={18} />}
           Abrir caja
         </button>
       </div>
@@ -58,6 +60,7 @@ function CajaNoAbierta({ onAbrir }) {
   );
 }
 
+/* ── Componente principal ─────────────────────────────────── */
 export default function Caja() {
   const [caja, setCaja] = useState(null);
   const [loadingCaja, setLoadingCaja] = useState(true);
@@ -95,6 +98,9 @@ export default function Caja() {
   const [facturaTipo, setFacturaTipo] = useState("B");
   const [facturaGuardando, setFacturaGuardando] = useState(false);
 
+  // Tabs mobile
+  const [mobileTab, setMobileTab] = useState("venta"); // "venta" | "ventas"
+
   const cerrarGasto = useCallback(() => setShowGasto(false), []);
   const cerrarCierreModal = useCallback(() => setShowCierre(false), []);
   const cerrarFacturaModal = useCallback(() => setShowFacturaModal(false), []);
@@ -127,8 +133,8 @@ export default function Caja() {
   const descuentoNum = parseFloat(descuentoVenta) || 0;
   const totalDetalles = Math.max(0, totalDetallesBruto - descuentoNum);
   const totalMetodos = Object.values(metodos).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+  const faltaCubrir = totalDetalles > 0 ? Math.max(0, totalDetalles - totalMetodos) : 0;
 
-  // Edición inline de detalles
   const updateDetalleField = (i, field, val) => {
     setDetalles((prev) => prev.map((d, j) =>
       j === i ? { ...d, [field]: parseFloat(val) || 0 } : d
@@ -143,7 +149,7 @@ export default function Caja() {
           d.producto_id === prod.id ? { ...d, cantidad: d.cantidad + 1, subtotal: (d.cantidad + 1) * d.precio_unitario } : d
         );
       }
-      return [...prev, { producto_id: prod.id, descripcion: prod.nombre, cantidad: 1, precio_unitario: parseFloat(prod.precio_venta), subtotal: parseFloat(prod.precio_venta) }];
+      return [...prev, { producto_id: prod.id, descripcion: prod.nombre, imagen_url: prod.imagen_url || null, cantidad: 1, precio_unitario: parseFloat(prod.precio_venta), subtotal: parseFloat(prod.precio_venta) }];
     });
   };
 
@@ -167,24 +173,20 @@ export default function Caja() {
 
   const removeDetalle = (i) => setDetalles((p) => p.filter((_, j) => j !== i));
 
-  // Autocomplete: busca por nombre Y por SKU/código
   const handleDetalleLineChange = (val) => {
     setDetalleLine(val);
     const trimmed = val.trim();
     if (trimmed.length >= 1) {
       const term = norm(trimmed);
-      // Coincidencia exacta de SKU primero
       const skuExact = productos.find((p) => p.codigo && p.codigo === trimmed);
       if (skuExact) {
         setSuggestions([skuExact]);
       } else {
-        // Busca en nombre (con normalización) y en código (parcial)
         const matches = productos
           .filter((p) =>
             norm(p.nombre).includes(term) ||
             (p.codigo && p.codigo.toLowerCase().includes(term))
           )
-          // Prioriza: empieza por el término > contiene el término
           .sort((a, b) => {
             const aN = norm(a.nombre).startsWith(term) ? 0 : 1;
             const bN = norm(b.nombre).startsWith(term) ? 0 : 1;
@@ -200,24 +202,19 @@ export default function Caja() {
     }
   };
 
-  // Lookup por SKU desde lector de barras (Enter con código numérico puro)
   const handleDetalleKeyDown = async (e) => {
     if (e.key === "Enter") {
       const trimmed = detalleLine.trim();
-      // Si hay sugerencias visibles, tomar la primera
       if (suggestions.length > 0 && showSuggestions) {
         selectSuggestion(suggestions[0]);
         return;
       }
-      // Si parece un SKU de barras (≥6 dígitos numéricos), buscar en backend
       if (/^\d{6,}$/.test(trimmed)) {
         try {
           const r = await stockAPI.obtenerPorSku(trimmed);
           selectSuggestion(r.data);
           return;
-        } catch {
-          // no encontrado, cae a addDetalleLibre
-        }
+        } catch { /* no encontrado */ }
       }
       addDetalleLibre();
     }
@@ -230,7 +227,6 @@ export default function Caja() {
     setShowSuggestions(false);
   };
 
-  // Close suggestions on click outside
   useEffect(() => {
     const handleClick = (e) => {
       if (suggestionsRef.current && !suggestionsRef.current.contains(e.target) &&
@@ -249,12 +245,8 @@ export default function Caja() {
       const r = await stockAPI.crearProducto({
         nombre: nuevoProductoForm.nombre.trim(),
         precio_venta: parseFloat(nuevoProductoForm.precio_venta),
-        precio_costo: 0,
-        stock_actual: 0,
-        stock_minimo: 0,
-        unidad: "unidad",
+        precio_costo: 0, stock_actual: 0, stock_minimo: 0, unidad: "unidad",
       });
-      // Refresh products and add to current sale
       const prodsR = await stockAPI.productos({ activo: true });
       setProductos(prodsR.data);
       const newProd = prodsR.data.find((p) => p.id === r.data.id) || r.data;
@@ -269,14 +261,11 @@ export default function Caja() {
     const totalTrans = parseFloat(metodos.transferencia) || 0;
     const totalTarj = parseFloat(metodos.tarjeta) || 0;
     const pagado = totalEfc + totalTrans + totalTarj;
-    
-    // El fiado es el monto del subtotal no cubierto por el monto pagado
     const fiadoFinal = totalDetalles > 0 ? Math.max(0, totalDetalles - pagado) : 0;
-    
-    if (detalles.length === 0 && pagado === 0) return;
 
+    if (detalles.length === 0 && pagado === 0) return;
     if (fiadoFinal > 0 && !clienteId) {
-      alert(`Falta cubrir ${fmt(fiadoFinal)} del total. Debe seleccionar un cliente para generar la deuda/seña.`);
+      alert(`Falta cubrir ${fmt(fiadoFinal)}. Seleccione un cliente para fiado/seña.`);
       return;
     }
 
@@ -284,14 +273,10 @@ export default function Caja() {
     try {
       const ventaResp = await ventasAPI.crear({
         detalles: detalles.map(({ producto_id, promo_id, descripcion, cantidad, precio_unitario }) => ({ producto_id, promo_id, descripcion, cantidad, precio_unitario })),
-        efectivo: totalEfc,
-        transferencia: totalTrans,
-        tarjeta: totalTarj,
-        seña: 0,
-        fiado: fiadoFinal,
+        efectivo: totalEfc, transferencia: totalTrans, tarjeta: totalTarj,
+        seña: 0, fiado: fiadoFinal,
         cliente_id: clienteId ? parseInt(clienteId) : null,
-        caja_id: caja.id,
-        descuento_monto: descuentoNum,
+        caja_id: caja.id, descuento_monto: descuentoNum,
       });
       const ventaCreada = { ...ventaResp.data, detalles, total: totalDetalles || (pagado + fiadoFinal) };
       setLastVenta(ventaCreada);
@@ -343,7 +328,7 @@ export default function Caja() {
 
   if (loadingCaja) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
+      <div className="caja-empty-state">
         <Loader size={32} className="text-muted spin" />
       </div>
     );
@@ -351,214 +336,221 @@ export default function Caja() {
 
   if (!caja || caja.cerrada) return <CajaNoAbierta onAbrir={cargarCaja} />;
 
+  const ventasActivas = ventas.filter((v) => !v.anulada);
+
+  /* ── Render ─────────────────────────────────────────────── */
   return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h2 className="page-title">Caja del día</h2>
-          <p className="page-sub">
-            Abierta: {new Date(caja.fecha_apertura).toLocaleString("es-AR")} · Inicial: {fmt(caja.monto_inicial)}
-          </p>
+    <div className="caja-page">
+      {/* Header */}
+      <div className="caja-header">
+        <div className="caja-header-info">
+          <h2 className="caja-title">Caja del día</h2>
+          <div className="caja-meta">
+            <Clock size={13} />
+            <span>Abierta {new Date(caja.fecha_apertura).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}</span>
+            <span className="caja-meta-sep">·</span>
+            <span>Inicial: {fmt(caja.monto_inicial)}</span>
+          </div>
         </div>
-        <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
+        <div className="caja-header-actions">
           <button className="btn btn-ghost btn-sm" onClick={() => setShowGasto(true)}>
             <DollarSign size={14} /> <span className="btn-label">Gasto</span>
           </button>
           <button className="btn btn-danger btn-sm" onClick={() => setShowCierre(true)}>
-            Cerrar caja
+            <X size={14} /> <span className="btn-label">Cerrar</span> caja
           </button>
         </div>
       </div>
 
+      {/* Stats strip */}
       {resumen && (
-        <div className="grid-4 mb-6">
-          {[
-            { label: "Total vendido", value: resumen.ventas.total, color: "var(--success)" },
-            { label: "Efectivo", value: resumen.ventas.efectivo, color: "var(--text)" },
-            { label: "Transfer.", value: resumen.ventas.transferencia, color: "var(--info)" },
-            { label: "Fiado", value: resumen.ventas.fiado, color: "var(--danger)" },
-          ].map((s) => (
-            <div key={s.label} className="stat-card">
-              <div className="stat-label">{s.label}</div>
-              <div className="stat-value money" style={{ color: s.color, fontSize: "1.5rem" }}>{fmt(s.value)}</div>
+        <div className="caja-stats">
+          <div className="caja-stat caja-stat-main">
+            <ShoppingBag size={16} />
+            <div>
+              <span className="caja-stat-label">Vendido</span>
+              <span className="caja-stat-value">{fmt(resumen.ventas.total)}</span>
             </div>
-          ))}
+          </div>
+          <div className="caja-stat">
+            <Banknote size={16} />
+            <div>
+              <span className="caja-stat-label">Efectivo</span>
+              <span className="caja-stat-value">{fmt(resumen.ventas.efectivo)}</span>
+            </div>
+          </div>
+          <div className="caja-stat">
+            <ArrowRightLeft size={16} />
+            <div>
+              <span className="caja-stat-label">Transfer.</span>
+              <span className="caja-stat-value">{fmt(resumen.ventas.transferencia)}</span>
+            </div>
+          </div>
+          <div className="caja-stat">
+            <CreditCard size={16} />
+            <div>
+              <span className="caja-stat-label">Tarjeta</span>
+              <span className="caja-stat-value">{fmt(resumen.ventas.tarjeta)}</span>
+            </div>
+          </div>
+          {resumen.ventas.fiado > 0 && (
+            <div className="caja-stat caja-stat-danger">
+              <AlertCircle size={16} />
+              <div>
+                <span className="caja-stat-label">Fiado</span>
+                <span className="caja-stat-value">{fmt(resumen.ventas.fiado)}</span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      <div className="caja-grid">
-        <div>
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <h3 style={{ fontWeight: 700, fontSize: "1rem" }}>Ventas del día ({ventas.filter((v) => !v.anulada).length})</h3>
-            </div>
+      {/* Mobile tabs */}
+      <div className="caja-mobile-tabs show-mobile">
+        <button className={`caja-mobile-tab ${mobileTab === "venta" ? "active" : ""}`} onClick={() => setMobileTab("venta")}>
+          <Plus size={14} /> Nueva venta
+        </button>
+        <button className={`caja-mobile-tab ${mobileTab === "ventas" ? "active" : ""}`} onClick={() => setMobileTab("ventas")}>
+          <Clock size={14} /> Ventas ({ventasActivas.length})
+        </button>
+      </div>
 
-            <div className="table-wrap hide-mobile">
-              <table>
-                <thead>
-                  <tr><th>#</th><th>Hora</th><th>Detalle</th><th>Efectivo</th><th>Transfer.</th><th>Tarjeta</th><th>Fiado</th><th>Total</th><th></th></tr>
-                </thead>
-                <tbody>
-                  {ventas.length === 0 && <tr><td colSpan={9} className="text-center text-muted" style={{ padding: 32 }}>Aún no hay ventas registradas hoy</td></tr>}
-                  {ventas.map((v) => (
-                    <tr key={v.id} style={{ opacity: v.anulada ? 0.4 : 1 }}>
-                      <td className="text-muted">{v.id}</td>
-                      <td className="text-muted">{new Date(v.fecha).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}</td>
-                      <td>
-                        {v.detalle_libre || v.detalles?.map((d) => d.descripcion).join(", ") || "—"}
-                        {v.anulada && <span className="badge badge-danger" style={{ marginLeft: 6 }}>ANULADA</span>}
-                      </td>
-                      <td className="text-success">{v.efectivo > 0 ? fmt(v.efectivo) : ""}</td>
-                      <td style={{ color: "var(--info)" }}>{v.transferencia > 0 ? fmt(v.transferencia) : ""}</td>
-                      <td style={{ color: "var(--primary)" }}>{v.tarjeta > 0 ? fmt(v.tarjeta) : ""}</td>
-                      <td className="text-danger">{v.fiado > 0 ? fmt(v.fiado) : ""}</td>
-                      <td className="money font-bold">{fmt(v.total)}</td>
-                      <td>{!v.anulada && <button className="btn btn-ghost btn-sm" onClick={() => anularVenta(v.id)} title="Anular"><XCircle size={14} /></button>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      {/* Main grid */}
+      <div className="caja-layout">
+        {/* ── Panel Nueva venta ────────────────────────────── */}
+        <div className={`caja-panel-venta ${mobileTab === "venta" ? "" : "caja-hide-mobile"}`}>
+          <div className="caja-venta-card">
+            <h3 className="caja-section-title">
+              <Plus size={16} /> Nueva venta
+            </h3>
 
-            <div className="show-mobile">
-              {ventas.length === 0 && <p className="text-center text-muted" style={{ padding: 24 }}>Aún no hay ventas registradas hoy</p>}
-              {ventas.map((v) => (
-                <div key={v.id} style={{ opacity: v.anulada ? 0.4 : 1, padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <span className="text-muted" style={{ fontSize: "0.75rem" }}>#{v.id} · {new Date(v.fecha).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}</span>
-                      {v.anulada && <span className="badge badge-danger" style={{ marginLeft: 6 }}>ANULADA</span>}
-                    </div>
-                    <span className="money font-bold">{fmt(v.total)}</span>
-                  </div>
-                  <div style={{ fontSize: "0.8rem", marginTop: 2 }} className="text-muted">
-                    {v.detalle_libre || v.detalles?.map((d) => d.descripcion).join(", ") || "—"}
-                  </div>
-                  {!v.anulada && <button className="btn btn-ghost btn-sm mt-1" style={{ fontSize: "0.7rem" }} onClick={() => anularVenta(v.id)}><XCircle size={12} /> Anular</button>}
-                </div>
-              ))}
-            </div>
-
-            {gastos.length > 0 && (
-              <div style={{ marginTop: 20 }}>
-                <h4 style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--text2)", marginBottom: 8 }}>GASTOS</h4>
-                {gastos.map((g) => (
-                  <div key={g.id} className="flex items-center justify-between" style={{ padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-                    <span style={{ fontSize: "0.875rem" }}>{g.descripcion}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-danger money">{fmt(g.monto)}</span>
-                      <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px" }} onClick={() => eliminarGasto(g.id)} title="Eliminar gasto"><Trash2 size={12} /></button>
-                    </div>
-                  </div>
-                ))}
+            {/* Search */}
+            <div className="caja-search-wrap">
+              <div className="caja-search-box">
+                <Search size={16} className="caja-search-icon" />
+                <input
+                  ref={inputRef}
+                  className="caja-search-input"
+                  placeholder="Buscar producto, escanear código..."
+                  value={detalleLine}
+                  onChange={(e) => handleDetalleLineChange(e.target.value)}
+                  onKeyDown={handleDetalleKeyDown}
+                  onFocus={() => { if (detalleLine.trim().length >= 1 && suggestions.length > 0) setShowSuggestions(true); }}
+                />
+                {detalleLine && (
+                  <button className="caja-search-clear" onClick={() => { setDetalleLine(""); setSuggestions([]); setShowSuggestions(false); }}>
+                    <X size={14} />
+                  </button>
+                )}
               </div>
-            )}
-          </div>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div className="card">
-            <h3 style={{ fontWeight: 700, marginBottom: 16, fontSize: "1rem" }}>Nueva venta</h3>
-
-            <div className="form-group mb-4">
-              <label className="form-label">Buscar producto o escribir libre (ej: "Foto x10 @50")</label>
-              <div style={{ position: "relative" }}>
-                <div className="flex gap-2">
-                  <input
-                    ref={inputRef}
-                    className="form-input"
-                    placeholder='Buscar producto o escribir libre...'
-                    value={detalleLine}
-                    onChange={(e) => handleDetalleLineChange(e.target.value)}
-                    onKeyDown={handleDetalleKeyDown}
-                    onFocus={() => { if (detalleLine.trim().length >= 1 && suggestions.length > 0) setShowSuggestions(true); }}
-                  />
-                  <button className="btn btn-ghost btn-sm" onClick={addDetalleLibre} title="Agregar como texto libre"><Plus size={16} /></button>
-                </div>
-                {showSuggestions && (suggestions.length > 0 || detalleLine.trim().length >= 2) && (
-                  <div ref={suggestionsRef} className="autocomplete-dropdown">
-                    {suggestions.map((p) => (
-                      <button key={p.id} className="autocomplete-item" onClick={() => selectSuggestion(p)}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-start" }}>
-                          <span style={{ fontWeight: 500 }}>{p.nombre}</span>
-                          {p.codigo && <span className="font-mono text-muted" style={{ fontSize: "0.72rem" }}>SKU: {p.codigo}</span>}
+              {showSuggestions && (suggestions.length > 0 || detalleLine.trim().length >= 2) && (
+                <div ref={suggestionsRef} className="autocomplete-dropdown">
+                  {suggestions.map((p) => (
+                    <button key={p.id} className="autocomplete-item" onClick={() => selectSuggestion(p)}>
+                      <div className="caja-suggestion-left">
+                        {p.imagen_url ? (
+                          <img src={p.imagen_url} alt="" className="caja-suggestion-img" />
+                        ) : (
+                          <div className="caja-suggestion-placeholder"><Wine size={14} /></div>
+                        )}
+                        <div className="caja-suggestion-info">
+                          <span className="caja-suggestion-name">{p.nombre}</span>
+                          {p.codigo && <span className="caja-suggestion-sku">SKU: {p.codigo}</span>}
                         </div>
-                        <span className="money text-success" style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>{fmt(p.precio_venta)}</span>
+                      </div>
+                      <span className="money text-success" style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>{fmt(p.precio_venta)}</span>
+                    </button>
+                  ))}
+                  {detalleLine.trim().length >= 2 && (
+                    <button className="autocomplete-item autocomplete-create" onClick={() => {
+                      setNuevoProductoForm({ nombre: detalleLine.trim(), precio_venta: "" });
+                      setShowNuevoProducto(true);
+                      setShowSuggestions(false);
+                    }}>
+                      <PlusCircle size={14} />
+                      <span>Crear "<b>{detalleLine.trim()}</b>" como producto</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Quick access */}
+            {(productos.length > 0 || promos.length > 0) && (
+              <div className="caja-quick-section">
+                {productos.length > 0 && (
+                  <div className="caja-quick-grid">
+                    {productos.slice(0, 8).map((p) => (
+                      <button key={p.id} className="caja-quick-btn" onClick={() => addDetalleProducto(p)}>
+                        {p.imagen_url ? (
+                          <img src={p.imagen_url} alt="" className="caja-quick-img" />
+                        ) : (
+                          <div className="caja-quick-placeholder"><Wine size={14} /></div>
+                        )}
+                        <span className="caja-quick-name">{p.nombre}</span>
+                        <span className="caja-quick-price">{fmt(p.precio_venta)}</span>
                       </button>
                     ))}
-                    {detalleLine.trim().length >= 2 && (
-                      <button className="autocomplete-item autocomplete-create" onClick={() => {
-                        setNuevoProductoForm({ nombre: detalleLine.trim(), precio_venta: "" });
-                        setShowNuevoProducto(true);
-                        setShowSuggestions(false);
+                  </div>
+                )}
+                {promos.length > 0 && (
+                  <div className="caja-promo-row">
+                    {promos.map((pr) => (
+                      <button key={pr.id} className="caja-promo-btn" onClick={() => {
+                        const desc = pr.nombre + " (" + (pr.productos?.map((pp) => pp.producto?.nombre || "?").join(" + ")) + ")";
+                        setDetalles((prev) => [...prev, {
+                          promo_id: pr.id, descripcion: desc,
+                          cantidad: 1, precio_unitario: parseFloat(pr.precio_promo), subtotal: parseFloat(pr.precio_promo),
+                        }]);
                       }}>
-                        <PlusCircle size={14} />
-                        <span>Crear "<b>{detalleLine.trim()}</b>" como nuevo producto</span>
+                        <Tag size={13} />
+                        <span>{pr.nombre}</span>
+                        <span className="caja-promo-price">{fmt(pr.precio_promo)}</span>
                       </button>
-                    )}
+                    ))}
                   </div>
                 )}
               </div>
-            </div>
-
-            {productos.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <div className="form-label mb-4">Acceso rápido</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {productos.slice(0, 8).map((p) => (
-                    <button key={p.id} className="btn btn-ghost btn-sm" style={{ fontSize: "0.75rem" }} onClick={() => addDetalleProducto(p)}>
-                      {p.nombre.split(" ").slice(0, 3).join(" ")}
-                    </button>
-                  ))}
-                </div>
-              </div>
             )}
 
-            {promos.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <div className="form-label mb-4">Promos / Combos</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {promos.map((pr) => (
-                    <button key={pr.id} className="btn btn-ghost btn-sm" style={{ fontSize: "0.75rem", borderColor: "var(--success)", color: "var(--success)" }} onClick={() => {
-                      const desc = pr.nombre + " (" + (pr.productos?.map((pp) => pp.producto?.nombre || "?").join(" + ")) + ")";
-                      setDetalles((prev) => [...prev, {
-                        promo_id: pr.id,
-                        descripcion: desc,
-                        cantidad: 1,
-                        precio_unitario: parseFloat(pr.precio_promo),
-                        subtotal: parseFloat(pr.precio_promo),
-                      }]);
-                    }}>
-                      🏷️ {pr.nombre} — {fmt(pr.precio_promo)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
+            {/* Cart items */}
             {detalles.length > 0 && (
-              <div className="mb-4">
+              <div className="caja-cart">
+                <div className="caja-cart-header">
+                  <span>Productos ({detalles.length})</span>
+                  <span className="money">{fmt(totalDetallesBruto)}</span>
+                </div>
                 {detalles.map((d, i) => (
-                  <div key={i} style={{ padding: "6px 0", borderBottom: "1px solid var(--border)", display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: 6, alignItems: "center", fontSize: "0.82rem" }}>
-                    <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.descripcion}</span>
-                    <input type="number" className="form-input" style={{ width: 52, padding: "3px 6px", fontSize: "0.78rem" }} value={d.cantidad} onChange={(e) => updateDetalleField(i, "cantidad", e.target.value)} title="Cantidad" />
-                    <input type="number" className="form-input" style={{ width: 76, padding: "3px 6px", fontSize: "0.78rem" }} value={d.precio_unitario} onChange={(e) => updateDetalleField(i, "precio_unitario", e.target.value)} title="Precio" />
-                    <div className="flex items-center gap-1">
-                      <span className="money" style={{ minWidth: 60, textAlign: "right" }}>{fmt(d.cantidad * d.precio_unitario)}</span>
-                      <button className="btn btn-ghost btn-sm" style={{ padding: "2px 5px" }} onClick={() => removeDetalle(i)}><Trash2 size={11} /></button>
+                  <div key={i} className="caja-cart-item">
+                    <div className="caja-cart-item-left">
+                      {d.imagen_url && <img src={d.imagen_url} alt="" className="caja-cart-item-img" />}
+                      <span className="caja-cart-item-name">{d.descripcion}</span>
+                    </div>
+                    <div className="caja-cart-item-right">
+                      <div className="caja-qty-control">
+                        <button onClick={() => {
+                          if (d.cantidad <= 1) { removeDetalle(i); return; }
+                          updateDetalleField(i, "cantidad", d.cantidad - 1);
+                        }}><Minus size={12} /></button>
+                        <span>{d.cantidad}</span>
+                        <button onClick={() => updateDetalleField(i, "cantidad", d.cantidad + 1)}><Plus size={12} /></button>
+                      </div>
+                      <span className="caja-cart-item-price">{fmt(d.cantidad * d.precio_unitario)}</span>
+                      <button className="caja-cart-item-remove" onClick={() => removeDetalle(i)}><Trash2 size={12} /></button>
                     </div>
                   </div>
                 ))}
-                <div className="flex justify-between" style={{ marginTop: 8, fontSize: "0.85rem" }}>
-                  <span className="text-muted">Subtotal</span>
-                  <span className="money">{fmt(totalDetallesBruto)}</span>
-                </div>
-                <div className="form-group" style={{ marginTop: 8 }}>
-                  <label className="form-label">Descuento ($)</label>
-                  <input type="number" className="form-input" placeholder="0" value={descuentoVenta} onChange={(e) => setDescuentoVenta(e.target.value)} style={{ fontSize: "0.85rem" }} />
+
+                {/* Discount */}
+                <div className="caja-discount-row">
+                  <label>Descuento</label>
+                  <div className="caja-discount-input-wrap">
+                    <span>$</span>
+                    <input type="number" placeholder="0" value={descuentoVenta} onChange={(e) => setDescuentoVenta(e.target.value)} />
+                  </div>
                 </div>
                 {descuentoNum > 0 && (
-                  <div className="flex justify-between" style={{ marginTop: 6, fontWeight: 700 }}>
+                  <div className="caja-cart-total-row">
                     <span>Total con descuento</span>
                     <span className="money text-success">{fmt(totalDetalles)}</span>
                   </div>
@@ -566,80 +558,138 @@ export default function Caja() {
               </div>
             )}
 
-            <hr className="divider" />
-
-            <div className="form-group mb-4">
-              <label className="form-label">Método de pago (puede ser mixto)</label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                {METODOS.map((m) => (
-                  <div key={m} className="form-group">
-                    <label className={`form-label payment-pill ${m} ${metodos[m] ? "active" : ""}`} style={{ marginBottom: 4, borderRadius: 6, padding: "4px 8px", display: "flex", justifyContent: "space-between" }}>
-                      {m.charAt(0).toUpperCase() + m.slice(1)}
-                    </label>
-                    <input type="number" className="form-input" placeholder="$" value={metodos[m] || ""} onChange={(e) => setMetodos((p) => ({ ...p, [m]: e.target.value }))} style={{ fontSize: "0.9rem" }} />
-                  </div>
-                ))}
-                
-                <div className="form-group">
-                  <label className="form-label payment-pill text-danger active" style={{ marginBottom: 4, borderRadius: 6, padding: "4px 8px", display: "flex", justifyContent: "space-between", background: "rgba(239, 68, 68, 0.1)" }}>
-                    Falta (Seña/Fiado)
-                  </label>
-                  <input type="text" className="form-input" readOnly value={fmt(totalDetalles > 0 ? Math.max(0, totalDetalles - (parseFloat(metodos.efectivo || 0) + parseFloat(metodos.transferencia || 0) + parseFloat(metodos.tarjeta || 0))) : 0)} style={{ fontSize: "0.9rem", color: "var(--danger)", background: "var(--bg-card)", fontWeight: 700 }} />
+            {/* Payment */}
+            <div className="caja-payment">
+              <span className="caja-payment-title">Método de pago</span>
+              <div className="caja-payment-grid">
+                <div className="caja-payment-method">
+                  <div className="caja-payment-label caja-pay-efectivo"><Banknote size={14} /> Efectivo</div>
+                  <input type="number" className="form-input" placeholder="$ 0" value={metodos.efectivo} onChange={(e) => setMetodos((p) => ({ ...p, efectivo: e.target.value }))} />
+                </div>
+                <div className="caja-payment-method">
+                  <div className="caja-payment-label caja-pay-transfer"><ArrowRightLeft size={14} /> Transferencia</div>
+                  <input type="number" className="form-input" placeholder="$ 0" value={metodos.transferencia} onChange={(e) => setMetodos((p) => ({ ...p, transferencia: e.target.value }))} />
+                </div>
+                <div className="caja-payment-method">
+                  <div className="caja-payment-label caja-pay-tarjeta"><CreditCard size={14} /> Tarjeta</div>
+                  <input type="number" className="form-input" placeholder="$ 0" value={metodos.tarjeta} onChange={(e) => setMetodos((p) => ({ ...p, tarjeta: e.target.value }))} />
                 </div>
               </div>
+
+              {faltaCubrir > 0 && (
+                <div className="caja-falta">
+                  <AlertCircle size={14} />
+                  <span>Falta cubrir: <b>{fmt(faltaCubrir)}</b> (queda como fiado)</span>
+                </div>
+              )}
+
+              {faltaCubrir > 0 && (
+                <div className="form-group">
+                  <label className="form-label" style={{ color: "var(--danger)" }}>Cliente para fiado</label>
+                  <select className="form-select" value={clienteId} onChange={(e) => setClienteId(e.target.value)}>
+                    <option value="">Seleccionar cliente...</option>
+                    {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre} {c.deuda_total > 0 ? `(debe ${fmt(c.deuda_total)})` : ""}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
 
-            {totalDetalles > 0 && Math.max(0, totalDetalles - (parseFloat(metodos.efectivo || 0) + parseFloat(metodos.transferencia || 0) + parseFloat(metodos.tarjeta || 0))) > 0 && (
-              <div className="form-group mb-4">
-                <label className="form-label text-danger">Cliente (requerido al faltar cubrir total)</label>
-                <select className="form-select" value={clienteId} onChange={(e) => setClienteId(e.target.value)}>
-                  <option value="">Seleccionar cliente...</option>
-                  {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre} {c.deuda_total > 0 ? `(debe ${fmt(c.deuda_total)})` : ""}</option>)}
-                </select>
+            {/* Total + submit */}
+            <div className="caja-submit">
+              <div className="caja-submit-total">
+                <span>Total</span>
+                <span className="caja-submit-amount">{fmt(totalDetalles || totalMetodos)}</span>
+              </div>
+              <button className="btn btn-primary btn-lg w-full caja-submit-btn" onClick={guardarVenta} disabled={saving || (detalles.length === 0 && totalMetodos === 0)}>
+                {saving ? <Loader size={18} className="spin" /> : <CheckCircle size={18} />}
+                Registrar venta
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Panel historial ─────────────────────────────── */}
+        <div className={`caja-panel-historial ${mobileTab === "ventas" ? "" : "caja-hide-mobile"}`}>
+          <div className="caja-historial-card">
+            <h3 className="caja-section-title">
+              <Clock size={16} /> Ventas del día
+              <span className="caja-section-count">{ventasActivas.length}</span>
+            </h3>
+
+            {ventas.length === 0 ? (
+              <div className="caja-empty-list">
+                <ShoppingBag size={28} />
+                <span>Sin ventas registradas hoy</span>
+              </div>
+            ) : (
+              <div className="caja-ventas-list">
+                {ventas.map((v) => (
+                  <div key={v.id} className={`caja-venta-row ${v.anulada ? "caja-venta-anulada" : ""}`}>
+                    <div className="caja-venta-left">
+                      <div className="caja-venta-time">
+                        {new Date(v.fecha).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                      <div className="caja-venta-detail">
+                        <span className="caja-venta-desc">
+                          {v.detalle_libre || v.detalles?.map((d) => d.descripcion).join(", ") || "—"}
+                        </span>
+                        <div className="caja-venta-badges">
+                          {v.efectivo > 0 && <span className="caja-venta-badge caja-badge-ef">{fmt(v.efectivo)}</span>}
+                          {v.transferencia > 0 && <span className="caja-venta-badge caja-badge-tr">{fmt(v.transferencia)}</span>}
+                          {v.tarjeta > 0 && <span className="caja-venta-badge caja-badge-ta">{fmt(v.tarjeta)}</span>}
+                          {v.fiado > 0 && <span className="caja-venta-badge caja-badge-fi">{fmt(v.fiado)}</span>}
+                          {v.anulada && <span className="badge badge-danger">ANULADA</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="caja-venta-right">
+                      <span className="caja-venta-total">{fmt(v.total)}</span>
+                      {!v.anulada && (
+                        <button className="caja-venta-anular-btn" onClick={() => anularVenta(v.id)} title="Anular">
+                          <XCircle size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
-            <div className="flex justify-between items-center" style={{ marginBottom: 16, padding: "12px 0", borderTop: "1px solid var(--border)" }}>
-              <span style={{ fontWeight: 600 }}>Total cobrado</span>
-              <span className="money-lg text-success">{fmt(totalMetodos || totalDetalles)}</span>
-            </div>
-
-            <button className="btn btn-primary w-full" onClick={guardarVenta} disabled={saving || (detalles.length === 0 && totalMetodos === 0)}>
-              {saving ? <Loader size={16} className="spin" /> : <CheckCircle size={16} />}
-              Registrar venta
-            </button>
+            {gastos.length > 0 && (
+              <div className="caja-gastos-section">
+                <h4 className="caja-gastos-title">Gastos</h4>
+                {gastos.map((g) => (
+                  <div key={g.id} className="caja-gasto-row">
+                    <span>{g.descripcion}</span>
+                    <div className="caja-gasto-right">
+                      <span className="text-danger money">{fmt(g.monto)}</span>
+                      <button className="caja-venta-anular-btn" onClick={() => eliminarGasto(g.id)} title="Eliminar"><Trash2 size={12} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Toast: última venta + ticket */}
+      {/* ── Toast última venta ──────────────────────────────── */}
       {lastVenta && (
-        <div style={{
-          position: "fixed", bottom: 24, right: 24, zIndex: 500,
-          background: "var(--bg2)", border: "1px solid var(--success)",
-          borderRadius: "var(--radius)", padding: "14px 18px",
-          boxShadow: "var(--shadow)", display: "flex", alignItems: "center", gap: 12,
-          animation: "slideUp 0.2s ease",
-        }}>
-          <CheckCircle size={18} style={{ color: "var(--success)", flexShrink: 0 }} />
-          <div>
-            <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>Venta registrada ✓</div>
-            <div className="text-muted" style={{ fontSize: "0.75rem" }}>{fmt(lastVenta.total)}</div>
+        <div className="caja-toast">
+          <div className="caja-toast-icon"><CheckCircle size={20} /></div>
+          <div className="caja-toast-info">
+            <span className="caja-toast-title">Venta registrada</span>
+            <span className="caja-toast-amount">{fmt(lastVenta.total)}</span>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={() => imprimirTicket(lastVenta)} title="Imprimir ticket">
-            <Printer size={14} /> Ticket
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={() => {
-            setFacturaTipo("B");
-            setShowFacturaModal(true);
-          }} title="Emitir factura">
-            <FileText size={14} /> Facturar
-          </button>
-          <button className="btn btn-ghost btn-sm" style={{ padding: "4px 8px" }} onClick={() => setLastVenta(null)}>✕</button>
+          <div className="caja-toast-actions">
+            <button className="btn btn-ghost btn-sm" onClick={() => imprimirTicket(lastVenta)}><Printer size={14} /> Ticket</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setFacturaTipo("B"); setShowFacturaModal(true); }}><FileText size={14} /> Facturar</button>
+          </div>
+          <button className="caja-toast-close" onClick={() => setLastVenta(null)}><X size={16} /></button>
         </div>
       )}
 
-      {/* Modal gasto */}
+      {/* ── Modales ─────────────────────────────────────────── */}
       <Modal open={showGasto} onClose={cerrarGasto} title="Registrar gasto">
         <div className="flex-col flex gap-4">
           <div className="form-group">
@@ -665,10 +715,9 @@ export default function Caja() {
         </div>
       </Modal>
 
-      {/* Modal nuevo producto rápido */}
-      <Modal open={showNuevoProducto} onClose={cerrarNuevoProducto} title="Crear producto rapido">
+      <Modal open={showNuevoProducto} onClose={cerrarNuevoProducto} title="Crear producto rápido">
         <p className="text-muted" style={{ fontSize: "0.85rem", marginBottom: 16 }}>
-          Se creara el producto y se agregara automaticamente a la venta actual.
+          Se creará el producto y se agregará a la venta actual.
         </p>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div className="form-group">
@@ -688,7 +737,6 @@ export default function Caja() {
         </div>
       </Modal>
 
-      {/* Modal cierre */}
       <Modal open={showCierre && !!resumen} onClose={cerrarCierreModal} title="Cierre de caja">
         {resumen && (
           <>
@@ -704,7 +752,7 @@ export default function Caja() {
                 <div className="stat-value text-danger" style={{ fontSize: "1.1rem" }}>{fmt(resumen.gastos)}</div>
               </div>
               <div className="stat-card card-sm">
-                <div className="stat-label">Balance efectivo sistema</div>
+                <div className="stat-label">Balance efectivo</div>
                 <div className="stat-value text-success" style={{ fontSize: "1.1rem" }}>{fmt(resumen.balance_efectivo)}</div>
               </div>
             </div>
@@ -720,7 +768,6 @@ export default function Caja() {
         )}
       </Modal>
 
-      {/* Modal tipo factura */}
       <Modal open={showFacturaModal} onClose={cerrarFacturaModal} title="Emitir factura">
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div className="form-group">
