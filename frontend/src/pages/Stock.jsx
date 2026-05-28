@@ -63,13 +63,13 @@ export default function Stock() {
   };
 
   const abrirNuevo = () => {
-    setForm({ nombre: "", codigo: "", categoria_id: "", tipo_vino: "", imagen_url: "", precio_venta: "", precio_costo: "", stock_actual: "0", stock_minimo: "0", unidad: "botella", fecha_vencimiento: "" });
+    setForm({ nombre: "", codigo: "", categoria_id: "", tipo_vino: "", imagen_url: "", nota_sabor: "", maridaje: "", ocasion: "", precio_venta: "", precio_costo: "", stock_actual: "0", stock_minimo: "0", unidad: "botella", fecha_vencimiento: "" });
     setModal("nuevo");
   };
 
   const abrirEditar = (p) => {
     setSelected(p);
-    setForm({ nombre: p.nombre, codigo: p.codigo || "", categoria_id: p.categoria_id || "", tipo_vino: p.tipo_vino || "", imagen_url: p.imagen_url || "", precio_venta: p.precio_venta, precio_costo: p.precio_costo || "", stock_actual: p.stock_actual, stock_minimo: p.stock_minimo, unidad: p.unidad, fecha_vencimiento: p.fecha_vencimiento || "" });
+    setForm({ nombre: p.nombre, codigo: p.codigo || "", categoria_id: p.categoria_id || "", tipo_vino: p.tipo_vino || "", imagen_url: p.imagen_url || "", nota_sabor: p.nota_sabor || "", maridaje: p.maridaje || "", ocasion: p.ocasion || "", precio_venta: p.precio_venta, precio_costo: p.precio_costo || "", stock_actual: p.stock_actual, stock_minimo: p.stock_minimo, unidad: p.unidad, fecha_vencimiento: p.fecha_vencimiento || "" });
     setModal("editar");
   };
 
@@ -88,6 +88,9 @@ export default function Stock() {
         categoria_id: form.categoria_id ? parseInt(form.categoria_id) : null,
         tipo_vino: form.tipo_vino || null,
         imagen_url: form.imagen_url || null,
+        nota_sabor: form.nota_sabor || null,
+        maridaje: form.maridaje || null,
+        ocasion: form.ocasion || null,
         precio_venta: parseFloat(form.precio_venta) || 0,
         precio_costo: parseFloat(form.precio_costo) || 0,
         stock_actual: parseFloat(form.stock_actual) || 0,
@@ -324,6 +327,22 @@ export default function Stock() {
               <input type="date" className="form-input" value={form.fecha_vencimiento || ""} onChange={(e) => setForm((p) => ({ ...p, fecha_vencimiento: e.target.value || null }))} />
             </div>
           </div>
+          <hr className="divider" />
+          <h4 style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--text2)", marginBottom: 4 }}>Asesor de vinos (opcional)</h4>
+          <div className="form-group">
+            <label className="form-label">Notas de sabor</label>
+            <textarea className="form-input" rows={2} placeholder="Ej: Frutal, con notas de cereza y vainilla, taninos suaves..." value={form.nota_sabor || ""} onChange={(e) => setForm((p) => ({ ...p, nota_sabor: e.target.value }))} style={{ resize: "vertical" }} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Maridaje (comidas)</label>
+            <textarea className="form-input" rows={2} placeholder="Ej: Carnes rojas, pastas con salsa, quesos duros, asado..." value={form.maridaje || ""} onChange={(e) => setForm((p) => ({ ...p, maridaje: e.target.value }))} style={{ resize: "vertical" }} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Ocasión ideal</label>
+            <textarea className="form-input" rows={2} placeholder="Ej: Cena romántica, reunión de amigos, asado familiar, regalo..." value={form.ocasion || ""} onChange={(e) => setForm((p) => ({ ...p, ocasion: e.target.value }))} style={{ resize: "vertical" }} />
+          </div>
+
+          <hr className="divider" />
           <div className="form-group">
             <label className="form-label">Imagen del producto</label>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

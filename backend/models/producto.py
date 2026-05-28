@@ -23,6 +23,9 @@ class Producto(Base):
     categoria_id = Column(Integer, ForeignKey("categorias.id"), nullable=True)
     tipo_vino = Column(String(50), nullable=True)  # tinto, blanco, rosado, espumante, dulce
     imagen_url = Column(String(500), nullable=True)
+    nota_sabor = Column(String(500), nullable=True)      # descripción del sabor
+    maridaje = Column(String(500), nullable=True)         # comidas recomendadas
+    ocasion = Column(String(500), nullable=True)          # ocasiones ideales
     precio_venta = Column(Numeric(10, 2), nullable=False, default=0)
     precio_costo = Column(Numeric(10, 2), nullable=True, default=0)
     stock_actual = Column(Numeric(10, 2), nullable=False, default=0)

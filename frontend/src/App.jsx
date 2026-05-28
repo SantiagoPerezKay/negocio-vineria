@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, NavLink, Navigate } from "react-router-do
 import {
   Package, Users, Truck, BarChart2, DollarSign, AlertTriangle,
   Sun, Moon, Menu, X, List, ShoppingCart, History, Home,
-  Bell, LogOut, Settings, RotateCcw, FileText, Wine,
+  Bell, LogOut, Settings, RotateCcw, FileText, Wine, Sparkles,
 } from "lucide-react";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
@@ -19,6 +19,7 @@ import Presupuestos from "./pages/Presupuestos";
 import HistorialVentas from "./pages/HistorialVentas";
 import Facturas from "./pages/Facturas";
 import Promos from "./pages/Promos";
+import Asesor from "./pages/Asesor";
 import "./index.css";
 
 // ── Theme context ────────────────────────────────────────
@@ -61,6 +62,7 @@ const navGroups = [
     items: [
       { to: "/stock",        icon: <Wine />,         label: "Productos"        },
       { to: "/promos",       icon: <Package />,      label: "Promos / Combos"  },
+      { to: "/asesor",       icon: <Sparkles />,     label: "Asesor de Vinos"  },
     ],
   },
   {
@@ -197,6 +199,7 @@ function AppContent() {
           <Route path="/facturas"     element={<Facturas />}      />
           <Route path="/stock"        element={<Stock />}          />
           <Route path="/promos"       element={<Promos />}         />
+          <Route path="/asesor"       element={<Asesor />}         />
           <Route path="/clientes"     element={<Clientes />}       />
           <Route path="/proveedores"  element={<Proveedores />}    />
           <Route path="/movimientos"  element={<Movimientos />}    />

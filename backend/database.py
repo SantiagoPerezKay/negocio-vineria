@@ -27,6 +27,9 @@ async def create_tables():
         # Idempotent migrations for new columns
         migrations = [
             "ALTER TABLE productos ADD COLUMN IF NOT EXISTS imagen_url VARCHAR(500)",
+            "ALTER TABLE productos ADD COLUMN IF NOT EXISTS nota_sabor VARCHAR(500)",
+            "ALTER TABLE productos ADD COLUMN IF NOT EXISTS maridaje VARCHAR(500)",
+            "ALTER TABLE productos ADD COLUMN IF NOT EXISTS ocasion VARCHAR(500)",
         ]
         for sql in migrations:
             try:

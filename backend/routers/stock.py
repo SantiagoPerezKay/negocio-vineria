@@ -25,6 +25,9 @@ class ProductoIn(BaseModel):
     categoria_id: Optional[int] = None
     tipo_vino: Optional[str] = None
     imagen_url: Optional[str] = None
+    nota_sabor: Optional[str] = None
+    maridaje: Optional[str] = None
+    ocasion: Optional[str] = None
     precio_venta: Decimal
     precio_costo: Optional[Decimal] = None
     stock_actual: Decimal = Decimal("0")
@@ -160,6 +163,31 @@ async def ajustar_stock(producto_id: int, data: AjusteStock, db: AsyncSession = 
     await db.commit()
     await db.refresh(prod)
     return prod
+
+
+@router.get("/recomendar")
+async def recomendar_productos(
+    q: Optional[str] = None,
+    tipo_vino: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Busca productos por texto en nombre, sabor, maridaje y ocasión."""
+    query = select(Producto).options(selectinload(Producto.categoria)).where(Producto.activo == True)
+
+    if tipo_vino:
+        query = query.where(Producto.tipo_vino == tipo_vino)
+
+    if q:
+        term = f"%{q.lower()}%"
+        query = query.where(
+            func.lower(Producto.nombre).like(term)
+            | func.lower(func.coalesce(Producto.nota_sabor, "")).like(term)
+            | func.lower(func.coalesce(Producto.maridaje, "")).like(term)
+            | func.lower(func.coalesce(Producto.ocasion, "")).like(term)
+        )
+
+    result = await db.execute(query.order_by(Producto.nombre))
+    return result.scalars().all()
 
 
 @router.get("/alertas")

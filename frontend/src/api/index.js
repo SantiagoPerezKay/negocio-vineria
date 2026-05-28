@@ -35,6 +35,7 @@ export const stockAPI = {
   eliminarProducto: (id) => api.delete(`/stock/productos/${id}`),
   obtenerPorSku: (sku) => api.get(`/stock/productos/sku/${encodeURIComponent(sku)}`),
   ajustarStock: (id, data) => api.patch(`/stock/productos/${id}/ajuste`, data),
+  recomendar: (params) => api.get("/stock/recomendar", { params }),
   alertas: () => api.get("/stock/alertas"),
 };
 
