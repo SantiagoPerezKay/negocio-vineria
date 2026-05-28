@@ -91,8 +91,13 @@ export default function Caja() {
   const [showCierre, setShowCierre] = useState(false);
   const [montoCierre, setMontoCierre] = useState("");
 
+  const [showFacturaModal, setShowFacturaModal] = useState(false);
+  const [facturaTipo, setFacturaTipo] = useState("B");
+  const [facturaGuardando, setFacturaGuardando] = useState(false);
+
   const cerrarGasto = useCallback(() => setShowGasto(false), []);
   const cerrarCierreModal = useCallback(() => setShowCierre(false), []);
+  const cerrarFacturaModal = useCallback(() => setShowFacturaModal(false), []);
 
   const cargarCaja = useCallback(async () => {
     setLoadingCaja(true);
@@ -624,11 +629,9 @@ export default function Caja() {
           <button className="btn btn-ghost btn-sm" onClick={() => imprimirTicket(lastVenta)} title="Imprimir ticket">
             <Printer size={14} /> Ticket
           </button>
-          <button className="btn btn-ghost btn-sm" onClick={async () => {
-            try {
-              const r = await facturasAPI.crear({ tipo: "B", venta_id: lastVenta.id });
-              imprimirFactura(r.data);
-            } catch (e) { alert(e.response?.data?.detail || "Error al facturar"); }
+          <button className="btn btn-ghost btn-sm" onClick={() => {
+            setFacturaTipo("B");
+            setShowFacturaModal(true);
           }} title="Emitir factura">
             <FileText size={14} /> Facturar
           </button>
@@ -715,6 +718,53 @@ export default function Caja() {
             </div>
           </>
         )}
+      </Modal>
+
+      {/* Modal tipo factura */}
+      <Modal open={showFacturaModal} onClose={cerrarFacturaModal} title="Emitir factura">
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div className="form-group">
+            <label className="form-label">Tipo de factura</label>
+            <div style={{ display: "flex", gap: 10 }}>
+              {["A", "B", "C"].map((t) => (
+                <button
+                  key={t}
+                  className={`btn ${facturaTipo === t ? "btn-primary" : "btn-ghost"}`}
+                  style={{ flex: 1, fontSize: "1.1rem", fontWeight: 700, padding: "14px 0" }}
+                  onClick={() => setFacturaTipo(t)}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+          {lastVenta && (
+            <div style={{ background: "var(--bg3)", borderRadius: "var(--radius-sm)", padding: 12, border: "1px solid var(--border)" }}>
+              <div className="flex justify-between" style={{ fontSize: "0.85rem" }}>
+                <span className="text-muted">Venta #{lastVenta.id}</span>
+                <span className="money text-success" style={{ fontWeight: 700 }}>{fmt(lastVenta.total)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="modal-actions">
+          <button className="btn btn-ghost" onClick={cerrarFacturaModal}>Cancelar</button>
+          <button className="btn btn-primary" disabled={facturaGuardando} onClick={async () => {
+            setFacturaGuardando(true);
+            try {
+              const r = await facturasAPI.crear({ tipo: facturaTipo, venta_id: lastVenta.id });
+              imprimirFactura(r.data);
+              setShowFacturaModal(false);
+            } catch (e) {
+              alert(e.response?.data?.detail || "Error al emitir factura");
+            } finally {
+              setFacturaGuardando(false);
+            }
+          }}>
+            <FileText size={16} />
+            {facturaGuardando ? "Emitiendo..." : `Emitir Factura ${facturaTipo}`}
+          </button>
+        </div>
       </Modal>
     </div>
   );
