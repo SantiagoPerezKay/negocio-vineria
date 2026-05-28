@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { cajaAPI, ventasAPI, stockAPI, clientesAPI } from "../api";
+import { cajaAPI, ventasAPI, stockAPI, clientesAPI, promosAPI } from "../api";
 import { Plus, Trash2, XCircle, CheckCircle, Loader, DollarSign, PlusCircle, Printer, FileText } from "lucide-react";
 import Modal from "../components/Modal";
 import { imprimirTicket } from "../components/TicketVenta";
@@ -65,6 +65,7 @@ export default function Caja() {
   const [gastos, setGastos] = useState([]);
   const [resumen, setResumen] = useState(null);
   const [productos, setProductos] = useState([]);
+  const [promos, setPromos] = useState([]);
   const [clientes, setClientes] = useState([]);
 
   const [detalleLine, setDetalleLine] = useState("");
@@ -113,6 +114,7 @@ export default function Caja() {
   useEffect(() => {
     cargarCaja();
     stockAPI.productos({ activo: true }).then((r) => setProductos(r.data));
+    promosAPI.listar({ activo: true }).then((r) => setPromos(r.data));
     clientesAPI.listar().then((r) => setClientes(r.data));
   }, []);
 
@@ -276,7 +278,7 @@ export default function Caja() {
     setSaving(true);
     try {
       const ventaResp = await ventasAPI.crear({
-        detalles: detalles.map(({ producto_id, descripcion, cantidad, precio_unitario }) => ({ producto_id, descripcion, cantidad, precio_unitario })),
+        detalles: detalles.map(({ producto_id, promo_id, descripcion, cantidad, precio_unitario }) => ({ producto_id, promo_id, descripcion, cantidad, precio_unitario })),
         efectivo: totalEfc,
         transferencia: totalTrans,
         tarjeta: totalTarj,
@@ -488,11 +490,33 @@ export default function Caja() {
 
             {productos.length > 0 && (
               <div style={{ marginBottom: 16 }}>
-                <div className="form-label mb-4">Acceso rapido</div>
+                <div className="form-label mb-4">Acceso rápido</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {productos.slice(0, 8).map((p) => (
                     <button key={p.id} className="btn btn-ghost btn-sm" style={{ fontSize: "0.75rem" }} onClick={() => addDetalleProducto(p)}>
                       {p.nombre.split(" ").slice(0, 3).join(" ")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {promos.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div className="form-label mb-4">Promos / Combos</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {promos.map((pr) => (
+                    <button key={pr.id} className="btn btn-ghost btn-sm" style={{ fontSize: "0.75rem", borderColor: "var(--success)", color: "var(--success)" }} onClick={() => {
+                      const desc = pr.nombre + " (" + (pr.productos?.map((pp) => pp.producto?.nombre || "?").join(" + ")) + ")";
+                      setDetalles((prev) => [...prev, {
+                        promo_id: pr.id,
+                        descripcion: desc,
+                        cantidad: 1,
+                        precio_unitario: parseFloat(pr.precio_promo),
+                        subtotal: parseFloat(pr.precio_promo),
+                      }]);
+                    }}>
+                      🏷️ {pr.nombre} — {fmt(pr.precio_promo)}
                     </button>
                   ))}
                 </div>

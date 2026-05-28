@@ -79,6 +79,15 @@ export const presupuestosAPI = {
   eliminar: (id) => api.delete(`/presupuestos/${id}`),
 };
 
+// ── Promos ────────────────────────────────────────────────────────────────────
+export const promosAPI = {
+  listar: (params) => api.get("/promos/", { params }),
+  crear: (data) => api.post("/promos/", data),
+  obtener: (id) => api.get(`/promos/${id}`),
+  actualizar: (id, data) => api.put(`/promos/${id}`, data),
+  desactivar: (id) => api.delete(`/promos/${id}`),
+};
+
 // ── Facturas ──────────────────────────────────────────────────────────────────
 export const facturasAPI = {
   listar: (params) => api.get("/facturas/", { params }),

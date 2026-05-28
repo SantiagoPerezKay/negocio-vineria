@@ -18,6 +18,7 @@ import Movimientos from "./pages/Movimientos";
 import Presupuestos from "./pages/Presupuestos";
 import HistorialVentas from "./pages/HistorialVentas";
 import Facturas from "./pages/Facturas";
+import Promos from "./pages/Promos";
 import "./index.css";
 
 // ── Theme context ────────────────────────────────────────
@@ -59,6 +60,7 @@ const navGroups = [
     label: "Inventario",
     items: [
       { to: "/stock",        icon: <Wine />,         label: "Productos"        },
+      { to: "/promos",       icon: <Package />,      label: "Promos / Combos"  },
     ],
   },
   {
@@ -194,6 +196,7 @@ function AppContent() {
           <Route path="/presupuestos" element={<Presupuestos />}   />
           <Route path="/facturas"     element={<Facturas />}      />
           <Route path="/stock"        element={<Stock />}          />
+          <Route path="/promos"       element={<Promos />}         />
           <Route path="/clientes"     element={<Clientes />}       />
           <Route path="/proveedores"  element={<Proveedores />}    />
           <Route path="/movimientos"  element={<Movimientos />}    />

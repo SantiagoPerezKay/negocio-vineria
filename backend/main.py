@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import create_tables, AsyncSessionLocal
 from sqlalchemy import select
 from routers import ventas, caja, stock, clientes, proveedores, estadisticas, movimientos
-from routers import auth, presupuestos, devoluciones, facturas
+from routers import auth, presupuestos, devoluciones, facturas, promos
 
 app = FastAPI(
     title="Sistema Vinería",
@@ -30,12 +30,13 @@ app.include_router(movimientos.router)
 app.include_router(presupuestos.router)
 app.include_router(devoluciones.router)
 app.include_router(facturas.router)
+app.include_router(promos.router)
 
 
 @app.on_event("startup")
 async def startup():
     # Import all models so SQLAlchemy registers them before create_all
-    import models.usuario, models.venta, models.caja, models.cliente, models.producto, models.proveedor, models.presupuesto, models.devolucion, models.factura
+    import models.usuario, models.venta, models.caja, models.cliente, models.producto, models.proveedor, models.presupuesto, models.devolucion, models.factura, models.promo
     await create_tables()
     # Create default admin if no users exist
     async with AsyncSessionLocal() as db:

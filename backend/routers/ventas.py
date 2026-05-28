@@ -7,6 +7,7 @@ from models.venta import Venta, VentaDetalle
 from models.caja import CajaApertura, GastoCaja
 from models.cliente import Cliente
 from models.producto import Producto
+from models.promo import Promo, PromoProducto
 from pydantic import BaseModel
 from typing import Optional, List
 from decimal import Decimal
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/api/ventas", tags=["ventas"])
 
 class DetalleIn(BaseModel):
     producto_id: Optional[int] = None
+    promo_id: Optional[int] = None
     descripcion: Optional[str] = None
     cantidad: Decimal = Decimal("1")
     precio_unitario: Decimal
@@ -102,8 +104,20 @@ async def crear_venta(data: VentaIn, db: AsyncSession = Depends(get_db)):
         )
         db.add(detalle)
 
-        # Descontar stock
-        if d.producto_id:
+        # Si es una promo, descontar stock de cada producto componente
+        if d.promo_id:
+            result = await db.execute(
+                select(PromoProducto).where(PromoProducto.promo_id == d.promo_id)
+            )
+            promo_productos = result.scalars().all()
+            for pp in promo_productos:
+                await db.execute(
+                    update(Producto)
+                    .where(Producto.id == pp.producto_id)
+                    .values(stock_actual=Producto.stock_actual - pp.cantidad * d.cantidad)
+                )
+        # Si es un producto normal, descontar stock
+        elif d.producto_id:
             await db.execute(
                 update(Producto)
                 .where(Producto.id == d.producto_id)
