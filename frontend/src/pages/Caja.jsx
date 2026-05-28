@@ -322,10 +322,18 @@ export default function Caja() {
   };
 
   const cerrarCaja = async () => {
-    if (!montoCierre) return;
-    await cajaAPI.cerrar(caja.id, { monto_cierre_real: parseFloat(montoCierre) });
-    setShowCierre(false);
-    await cargarCaja();
+    const monto = parseFloat(montoCierre);
+    if (isNaN(monto) || monto < 0) {
+      alert("Ingresá el monto de efectivo contado en caja (puede ser 0)");
+      return;
+    }
+    try {
+      await cajaAPI.cerrar(caja.id, { monto_cierre_real: monto });
+      setShowCierre(false);
+      await cargarCaja();
+    } catch (err) {
+      alert(err.response?.data?.detail || "Error al cerrar caja");
+    }
   };
 
   if (loadingCaja) {
