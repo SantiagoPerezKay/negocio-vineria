@@ -175,7 +175,7 @@ export default function Stock() {
       <div className="table-wrap hide-mobile">
         <table>
           <thead>
-            <tr><th>Producto</th><th>SKU</th><th>Categoría</th><th>P. venta</th><th>P. costo</th><th>Stock</th><th>Estado</th><th>Vence</th><th>Acciones</th></tr>
+            <tr><th>Producto</th><th>SKU</th><th>Categoría</th><th>Tipo</th><th>P. venta</th><th>P. costo</th><th>Stock</th><th>Estado</th><th>Vence</th><th>Acciones</th></tr>
           </thead>
           <tbody>
             {productos.length === 0 && <tr><td colSpan={10} className="text-center text-muted" style={{ padding: 32 }}>Sin productos</td></tr>}
