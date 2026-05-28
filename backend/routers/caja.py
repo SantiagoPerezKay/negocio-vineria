@@ -7,7 +7,7 @@ from models.venta import Venta
 from pydantic import BaseModel
 from typing import Optional
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, date
 
 router = APIRouter(prefix="/api/caja", tags=["caja"])
 
@@ -22,9 +22,46 @@ class CierreIn(BaseModel):
     notas: Optional[str] = None
 
 
+async def _calcular_y_cerrar(caja: CajaApertura, db: AsyncSession, monto_cierre_real: Optional[Decimal] = None, notas: Optional[str] = None):
+    """Cierra una caja calculando todos los totales. Usado tanto para cierre manual como automático."""
+    totales = await db.execute(
+        select(
+            func.coalesce(func.sum(Venta.efectivo), 0).label("efectivo"),
+            func.coalesce(func.sum(Venta.transferencia), 0).label("transferencia"),
+            func.coalesce(func.sum(Venta.tarjeta), 0).label("tarjeta"),
+            func.coalesce(func.sum(Venta.seña), 0).label("seña"),
+            func.coalesce(func.sum(Venta.fiado), 0).label("fiado"),
+        ).where(Venta.caja_id == caja.id, Venta.anulada == False)
+    )
+    row = totales.one()
+
+    gastos_result = await db.execute(
+        select(func.coalesce(func.sum(GastoCaja.monto), 0)).where(GastoCaja.caja_id == caja.id)
+    )
+    total_gastos = gastos_result.scalar()
+
+    sistema = caja.monto_inicial + row.efectivo - total_gastos
+
+    caja.fecha_cierre = datetime.now()
+    caja.monto_cierre_real = monto_cierre_real if monto_cierre_real is not None else sistema
+    caja.monto_cierre_sistema = sistema
+    caja.total_efectivo = row.efectivo
+    caja.total_transferencia = row.transferencia
+    caja.total_tarjeta = row.tarjeta
+    caja.total_fiado = row.fiado
+    caja.total_gastos = total_gastos
+    caja.cerrada = True
+    if notas:
+        caja.notas = notas
+
+    await db.commit()
+    await db.refresh(caja)
+    return caja
+
+
 @router.get("/actual")
 async def caja_actual(db: AsyncSession = Depends(get_db)):
-    """Devuelve la caja abierta del día, o None."""
+    """Devuelve la caja abierta del día. Si hay una caja de un día anterior sin cerrar, la cierra automáticamente."""
     result = await db.execute(
         select(CajaApertura)
         .where(CajaApertura.cerrada == False)
@@ -32,17 +69,44 @@ async def caja_actual(db: AsyncSession = Depends(get_db)):
         .limit(1)
     )
     caja = result.scalar_one_or_none()
+
+    if caja is None:
+        return None
+
+    # Si la caja es de un día anterior, cerrarla automáticamente
+    fecha_apertura = caja.fecha_apertura
+    if hasattr(fecha_apertura, 'date'):
+        dia_apertura = fecha_apertura.date()
+    else:
+        dia_apertura = fecha_apertura
+
+    if dia_apertura < date.today():
+        await _calcular_y_cerrar(
+            caja, db,
+            notas=f"Cierre automático - caja del {dia_apertura.strftime('%d/%m/%Y')} no cerrada manualmente"
+        )
+        return None
+
     return caja
 
 
 @router.post("/abrir")
 async def abrir_caja(data: AperturaIn, db: AsyncSession = Depends(get_db)):
-    # Verificar que no haya caja abierta
+    # Auto-cerrar cajas viejas si las hay
     result = await db.execute(
-        select(CajaApertura).where(CajaApertura.cerrada == False).limit(1)
+        select(CajaApertura).where(CajaApertura.cerrada == False)
     )
-    if result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Ya hay una caja abierta")
+    cajas_abiertas = result.scalars().all()
+    for caja_vieja in cajas_abiertas:
+        fecha_ap = caja_vieja.fecha_apertura
+        dia_ap = fecha_ap.date() if hasattr(fecha_ap, 'date') else fecha_ap
+        if dia_ap < date.today():
+            await _calcular_y_cerrar(
+                caja_vieja, db,
+                notas=f"Cierre automático - caja del {dia_ap.strftime('%d/%m/%Y')} no cerrada manualmente"
+            )
+        else:
+            raise HTTPException(status_code=400, detail="Ya hay una caja abierta hoy")
 
     caja = CajaApertura(monto_inicial=data.monto_inicial, notas=data.notas)
     db.add(caja)
@@ -60,40 +124,7 @@ async def cerrar_caja(caja_id: int, data: CierreIn, db: AsyncSession = Depends(g
     if caja.cerrada:
         raise HTTPException(status_code=400, detail="La caja ya está cerrada")
 
-    # Calcular totales desde ventas
-    totales = await db.execute(
-        select(
-            func.coalesce(func.sum(Venta.efectivo), 0).label("efectivo"),
-            func.coalesce(func.sum(Venta.transferencia), 0).label("transferencia"),
-            func.coalesce(func.sum(Venta.tarjeta), 0).label("tarjeta"),
-            func.coalesce(func.sum(Venta.seña), 0).label("seña"),
-            func.coalesce(func.sum(Venta.fiado), 0).label("fiado"),
-        ).where(Venta.caja_id == caja_id, Venta.anulada == False)
-    )
-    row = totales.one()
-
-    # Gastos de la caja
-    gastos_result = await db.execute(
-        select(func.coalesce(func.sum(GastoCaja.monto), 0)).where(GastoCaja.caja_id == caja_id)
-    )
-    total_gastos = gastos_result.scalar()
-
-    sistema = caja.monto_inicial + row.efectivo - total_gastos
-
-    caja.fecha_cierre = datetime.now()
-    caja.monto_cierre_real = data.monto_cierre_real
-    caja.monto_cierre_sistema = sistema
-    caja.total_efectivo = row.efectivo
-    caja.total_transferencia = row.transferencia
-    caja.total_tarjeta = row.tarjeta
-    caja.total_fiado = row.fiado
-    caja.total_gastos = total_gastos
-    caja.cerrada = True
-    if data.notas:
-        caja.notas = data.notas
-
-    await db.commit()
-    await db.refresh(caja)
+    await _calcular_y_cerrar(caja, db, monto_cierre_real=data.monto_cierre_real, notas=data.notas)
     return caja
 
 
