@@ -179,7 +179,9 @@ function AppContent() {
     import("./api/index.js").then((mod) => {
       const { stockAPI, clientesAPI } = mod;
       Promise.all([stockAPI.alertas(), clientesAPI.listar({ con_deuda: true })]).then(([al, cl]) => {
-        setAlertCount((al.data?.length || 0) + (cl.data?.length || 0));
+        const stockAlertas = al.data?.length || 0;
+        const deudores = (cl.data || []).filter((c) => parseFloat(c.deuda_total) > 0).length;
+        setAlertCount(stockAlertas + deudores);
       }).catch(() => {});
     });
   }, []);

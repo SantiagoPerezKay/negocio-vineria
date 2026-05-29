@@ -39,7 +39,7 @@ export default function Dashboard() {
 
       setCaja(cajaR.data);
       setAlertasStock(alertasR.data);
-      setDeudores((clientesR.data || []).slice(0, 5));
+      setDeudores((clientesR.data || []).filter((c) => parseFloat(c.deuda_total) > 0).slice(0, 5));
       setResumenHoy(resumenR.data);
 
       if (cajaR.data && !cajaR.data.cerrada) {

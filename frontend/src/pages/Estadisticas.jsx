@@ -2,22 +2,67 @@ import { useState, useEffect } from "react";
 import { estadisticasAPI } from "../api";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
+  PieChart, Pie, Cell, AreaChart, Area,
 } from "recharts";
+import { TrendingUp, Banknote, CreditCard, ArrowRightLeft, Loader, AlertCircle } from "lucide-react";
 
 const fmt = (n) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(n || 0);
 
-const COLORS = ["#6366f1", "#22c55e", "#38bdf8", "#f59e0b", "#ef4444"];
+const fmtShort = (n) => {
+  if (n >= 1000000) return `$${(n / 1000000).toFixed(1)}M`;
+  if (n >= 1000) return `$${(n / 1000).toFixed(0)}k`;
+  return `$${n}`;
+};
+
 const METODO_COLORS = {
   efectivo: "#22c55e",
   transferencia: "#38bdf8",
-  tarjeta: "#6366f1",
-  seña: "#f59e0b",
+  tarjeta: "#818cf8",
   fiado: "#ef4444",
 };
 
+const METODO_LABELS = {
+  efectivo: "Efectivo",
+  transferencia: "Transferencia",
+  tarjeta: "Tarjeta",
+  fiado: "Fiado",
+};
+
+const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
 const now = new Date();
+
+/* Custom tooltip */
+function ChartTooltip({ active, payload, label, isVertical }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="chart-tooltip">
+      <div className="chart-tooltip-label">{isVertical ? payload[0]?.payload?.nombre : `Día ${label?.toString().slice(-2) || label}`}</div>
+      {payload.map((p, i) => (
+        <div key={i} className="chart-tooltip-row">
+          <span className="chart-tooltip-dot" style={{ background: p.color || p.fill }} />
+          <span className="chart-tooltip-name">{p.name === "total" ? "Ventas" : p.name === "total_vendido" ? "Facturado" : p.name}</span>
+          <span className="chart-tooltip-value">{fmt(p.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PieTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0];
+  return (
+    <div className="chart-tooltip">
+      <div className="chart-tooltip-row">
+        <span className="chart-tooltip-dot" style={{ background: d.payload.fill }} />
+        <span className="chart-tooltip-name">{METODO_LABELS[d.name] || d.name}</span>
+        <span className="chart-tooltip-value">{fmt(d.value)}</span>
+      </div>
+    </div>
+  );
+}
 
 export default function Estadisticas() {
   const [resumen, setResumen] = useState(null);
@@ -25,8 +70,10 @@ export default function Estadisticas() {
   const [topProductos, setTopProductos] = useState([]);
   const [anio, setAnio] = useState(now.getFullYear());
   const [mes, setMes] = useState(now.getMonth() + 1);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     Promise.all([
       estadisticasAPI.resumen(),
       estadisticasAPI.ventasPorDia({ anio, mes }),
@@ -35,149 +82,234 @@ export default function Estadisticas() {
       setResumen(r.data);
       setVentasDia(v.data);
       setTopProductos(p.data);
-    });
+    }).finally(() => setLoading(false));
   }, [anio, mes]);
 
   const pieData = resumen
     ? Object.entries(resumen.por_metodo)
         .filter(([, v]) => v > 0)
-        .map(([k, v]) => ({ name: k, value: v }))
+        .map(([k, v]) => ({ name: k, value: v, fill: METODO_COLORS[k] || "#6366f1" }))
     : [];
 
+  const totalMetodos = pieData.reduce((s, d) => s + d.value, 0);
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", padding: 80 }}>
+        <Loader size={28} className="spin text-muted" />
+      </div>
+    );
+  }
+
   return (
-    <div>
+    <div className="stats-page">
       <div className="page-header">
         <div>
           <h2 className="page-title">Estadísticas</h2>
-          <p className="page-sub">Resumen de ventas y rendimiento del negocio</p>
+          <p className="page-sub">Resumen de ventas y rendimiento</p>
         </div>
         <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
-          <select className="form-select" style={{ width: 100, minWidth: 0 }} value={anio} onChange={(e) => setAnio(parseInt(e.target.value))}>
+          <select className="form-select" style={{ width: 100 }} value={anio} onChange={(e) => setAnio(parseInt(e.target.value))}>
             {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
-          <select className="form-select" style={{ width: 130, minWidth: 0 }} value={mes} onChange={(e) => setMes(parseInt(e.target.value))}>
-            {["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
-              .map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
+          <select className="form-select" style={{ width: 140 }} value={mes} onChange={(e) => setMes(parseInt(e.target.value))}>
+            {MESES.map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
           </select>
         </div>
       </div>
 
-      {/* Balance general */}
+      {/* KPI cards */}
       {resumen && (
-        <div className="card mb-6" style={{ borderLeft: "4px solid var(--primary)", padding: "20px 24px" }}>
-          <h3 style={{ fontWeight: 700, fontSize: "1rem", marginBottom: 16 }}>Balance general</h3>
-          <div className="grid-4">
-            <div className="stat-card card-sm">
-              <div className="stat-label">Total vendido</div>
-              <div className="stat-value money text-success" style={{ fontSize: "1.4rem" }}>{fmt(resumen.facturado)}</div>
-              <div className="stat-sub">{resumen.total_ventas} ventas</div>
+        <div className="stats-kpi-row">
+          <div className="stats-kpi stats-kpi-main">
+            <div className="stats-kpi-icon" style={{ background: "var(--success-bg)", color: "var(--success)" }}>
+              <TrendingUp size={20} />
             </div>
-            <div className="stat-card card-sm">
-              <div className="stat-label">Total comprado</div>
-              <div className="stat-value money text-warning" style={{ fontSize: "1.4rem" }}>{fmt(resumen.total_compras)}</div>
+            <div>
+              <span className="stats-kpi-label">Total vendido</span>
+              <span className="stats-kpi-value text-success">{fmt(resumen.facturado)}</span>
+              <span className="stats-kpi-sub">{resumen.total_ventas} ventas</span>
             </div>
-            <div className="stat-card card-sm">
-              <div className="stat-label">Ganancia estimada</div>
-              <div className="stat-value money" style={{ fontSize: "1.4rem", color: resumen.ganancia_estimada >= 0 ? "var(--success)" : "var(--danger)" }}>
-                {fmt(resumen.ganancia_estimada)}
+          </div>
+          <div className="stats-kpi">
+            <div className="stats-kpi-icon" style={{ background: "var(--success-bg)", color: "var(--success)" }}>
+              <Banknote size={20} />
+            </div>
+            <div>
+              <span className="stats-kpi-label">Efectivo</span>
+              <span className="stats-kpi-value">{fmt(resumen.por_metodo?.efectivo)}</span>
+            </div>
+          </div>
+          <div className="stats-kpi">
+            <div className="stats-kpi-icon" style={{ background: "var(--info-bg)", color: "var(--info)" }}>
+              <ArrowRightLeft size={20} />
+            </div>
+            <div>
+              <span className="stats-kpi-label">Transferencia</span>
+              <span className="stats-kpi-value">{fmt(resumen.por_metodo?.transferencia)}</span>
+            </div>
+          </div>
+          <div className="stats-kpi">
+            <div className="stats-kpi-icon" style={{ background: "var(--primary-glow)", color: "var(--primary)" }}>
+              <CreditCard size={20} />
+            </div>
+            <div>
+              <span className="stats-kpi-label">Tarjeta</span>
+              <span className="stats-kpi-value">{fmt(resumen.por_metodo?.tarjeta)}</span>
+            </div>
+          </div>
+          {resumen.deuda_clientes_total > 0 && (
+            <div className="stats-kpi">
+              <div className="stats-kpi-icon" style={{ background: "var(--danger-bg)", color: "var(--danger)" }}>
+                <AlertCircle size={20} />
               </div>
-              <div className="stat-sub">Vendido - Comprado</div>
+              <div>
+                <span className="stats-kpi-label">Deuda clientes</span>
+                <span className="stats-kpi-value text-danger">{fmt(resumen.deuda_clientes_total)}</span>
+              </div>
             </div>
-            <div className="stat-card card-sm">
-              <div className="stat-label">Deuda proveedores</div>
-              <div className="stat-value money text-warning" style={{ fontSize: "1.4rem" }}>{fmt(resumen.deuda_proveedores_total)}</div>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* Detalle por método */}
-      {resumen && (
-        <div className="grid-4 mb-6">
-          <div className="stat-card">
-            <div className="stat-label">Efectivo</div>
-            <div className="stat-value money" style={{ fontSize: "1.5rem" }}>{fmt(resumen.por_metodo.efectivo)}</div>
+      {/* Charts row */}
+      <div className="stats-charts-row">
+        {/* Area chart - ventas por día */}
+        <div className="stats-chart-card stats-chart-wide">
+          <div className="stats-chart-header">
+            <h3>Ventas diarias</h3>
+            <span className="stats-chart-period">{MESES[mes - 1]} {anio}</span>
           </div>
-          <div className="stat-card">
-            <div className="stat-label">Transferencia</div>
-            <div className="stat-value money" style={{ fontSize: "1.5rem", color: "var(--info)" }}>{fmt(resumen.por_metodo.transferencia)}</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Tarjeta</div>
-            <div className="stat-value money" style={{ fontSize: "1.5rem", color: "var(--primary)" }}>{fmt(resumen.por_metodo.tarjeta)}</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Deuda clientes</div>
-            <div className="stat-value money" style={{ fontSize: "1.5rem", color: "var(--danger)" }}>{fmt(resumen.deuda_clientes_total)}</div>
-          </div>
-        </div>
-      )}
-
-      <div className="grid-2 mb-6">
-        {/* Ventas por día */}
-        <div className="card">
-          <h3 style={{ fontWeight: 700, marginBottom: 20, fontSize: "1rem" }}>
-            Ventas por día — {["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][mes]} {anio}
-          </h3>
-          {ventasDia.length === 0
-            ? <p className="text-muted text-center" style={{ padding: 32 }}>Sin datos</p>
-            : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={ventasDia} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="dia" tick={{ fill: "var(--text3)", fontSize: 10 }} tickFormatter={(d) => d.slice(8)} />
-                  <YAxis tick={{ fill: "var(--text3)", fontSize: 10 }} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
-                  <Tooltip
-                    contentStyle={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8 }}
-                    labelStyle={{ color: "var(--text)" }}
-                    formatter={(v) => [fmt(v), "Total"]}
-                  />
-                  <Bar dataKey="total" fill="var(--primary)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-        </div>
-
-        {/* Métodos de pago */}
-        <div className="card">
-          <h3 style={{ fontWeight: 700, marginBottom: 20, fontSize: "1rem" }}>Métodos de pago (total histórico)</h3>
-          {pieData.length === 0
-            ? <p className="text-muted text-center" style={{ padding: 32 }}>Sin datos</p>
-            : (
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                    {pieData.map((entry, i) => (
-                      <Cell key={i} fill={METODO_COLORS[entry.name] || COLORS[i % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8 }} formatter={(v) => fmt(v)} />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-        </div>
-      </div>
-
-      {/* Productos más vendidos */}
-      <div className="card">
-        <h3 style={{ fontWeight: 700, marginBottom: 20, fontSize: "1rem" }}>Productos más vendidos</h3>
-        {topProductos.length === 0
-          ? <p className="text-muted text-center" style={{ padding: 32 }}>Sin datos</p>
-          : (
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={topProductos} layout="vertical" margin={{ left: 20, right: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-                <XAxis type="number" tick={{ fill: "var(--text3)", fontSize: 10 }} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
-                <YAxis type="category" dataKey="nombre" tick={{ fill: "var(--text2)", fontSize: 11 }} width={160} />
-                <Tooltip
-                  contentStyle={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8 }}
-                  formatter={(v, name) => [name === "total_vendido" ? fmt(v) : v, name === "total_vendido" ? "Total $" : "Cantidad"]}
+          {ventasDia.length === 0 ? (
+            <div className="stats-chart-empty">Sin datos para este período</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={ventasDia} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id="gradVentas" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis
+                  dataKey="dia"
+                  tick={{ fill: "var(--text3)", fontSize: 11 }}
+                  tickFormatter={(d) => d.slice(8)}
+                  axisLine={{ stroke: "var(--border)" }}
+                  tickLine={false}
                 />
-                <Bar dataKey="total_vendido" fill="var(--success)" radius={[0, 4, 4, 0]} />
-              </BarChart>
+                <YAxis
+                  tick={{ fill: "var(--text3)", fontSize: 11 }}
+                  tickFormatter={fmtShort}
+                  axisLine={false}
+                  tickLine={false}
+                  width={50}
+                />
+                <Tooltip content={<ChartTooltip />} cursor={{ stroke: "var(--primary)", strokeWidth: 1, strokeDasharray: "4 4" }} />
+                <Area
+                  type="monotone" dataKey="total" name="total"
+                  stroke="var(--primary)" strokeWidth={2.5}
+                  fill="url(#gradVentas)"
+                  dot={{ r: 3, fill: "var(--primary)", strokeWidth: 0 }}
+                  activeDot={{ r: 5, fill: "var(--primary)", stroke: "#fff", strokeWidth: 2 }}
+                />
+              </AreaChart>
             </ResponsiveContainer>
           )}
+        </div>
+
+        {/* Pie chart - métodos */}
+        <div className="stats-chart-card">
+          <div className="stats-chart-header">
+            <h3>Métodos de pago</h3>
+          </div>
+          {pieData.length === 0 ? (
+            <div className="stats-chart-empty">Sin datos</div>
+          ) : (
+            <div>
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie
+                    data={pieData} dataKey="value" nameKey="name"
+                    cx="50%" cy="50%" innerRadius={50} outerRadius={80}
+                    paddingAngle={3} strokeWidth={0}
+                  >
+                    {pieData.map((entry, i) => (
+                      <Cell key={i} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<PieTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="stats-pie-legend">
+                {pieData.map((d) => (
+                  <div key={d.name} className="stats-pie-legend-item">
+                    <span className="stats-pie-dot" style={{ background: d.fill }} />
+                    <span className="stats-pie-name">{METODO_LABELS[d.name] || d.name}</span>
+                    <span className="stats-pie-pct">{totalMetodos > 0 ? ((d.value / totalMetodos) * 100).toFixed(0) : 0}%</span>
+                    <span className="stats-pie-val">{fmt(d.value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Top productos */}
+      <div className="stats-chart-card">
+        <div className="stats-chart-header">
+          <h3>Productos más vendidos</h3>
+        </div>
+        {topProductos.length === 0 ? (
+          <div className="stats-chart-empty">Sin datos</div>
+        ) : (
+          <div className="stats-top-list">
+            {topProductos.map((p, i) => {
+              const maxVal = topProductos[0]?.total_vendido || 1;
+              const pct = (p.total_vendido / maxVal) * 100;
+              return (
+                <div key={i} className="stats-top-item">
+                  <div className="stats-top-rank">#{i + 1}</div>
+                  <div className="stats-top-info">
+                    <div className="stats-top-name">{p.nombre}</div>
+                    <div className="stats-top-bar-wrap">
+                      <div className="stats-top-bar" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                  <div className="stats-top-values">
+                    <span className="stats-top-amount">{fmt(p.total_vendido)}</span>
+                    <span className="stats-top-qty">{p.cantidad_vendida} uds</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Balance summary */}
+      {resumen && (
+        <div className="stats-balance">
+          <div className="stats-balance-item">
+            <span>Total compras</span>
+            <span className="money text-warning">{fmt(resumen.total_compras)}</span>
+          </div>
+          <div className="stats-balance-item">
+            <span>Ganancia estimada</span>
+            <span className="money" style={{ color: resumen.ganancia_estimada >= 0 ? "var(--success)" : "var(--danger)" }}>
+              {fmt(resumen.ganancia_estimada)}
+            </span>
+          </div>
+          {resumen.deuda_proveedores_total > 0 && (
+            <div className="stats-balance-item">
+              <span>Deuda proveedores</span>
+              <span className="money text-warning">{fmt(resumen.deuda_proveedores_total)}</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
